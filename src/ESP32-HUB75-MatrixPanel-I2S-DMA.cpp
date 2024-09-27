@@ -35,8 +35,8 @@
 bool MatrixPanel_I2S_DMA::allocateDMAmemory()
 {
 
-  ESP_LOGI("I2S-DMA", "Free heap: %d", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
-  ESP_LOGI("I2S-DMA", "Free SPIRAM: %d", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+  ESP_LOGI("I2S-DMA", "Free heap: %zu", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  ESP_LOGI("I2S-DMA", "Free SPIRAM: %zu", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
   // Alright, theoretically we should be OK, so let us do this, so
   // lets allocate a chunk of memory for each row (a row could span multiple panels if chaining is in place)
@@ -67,7 +67,7 @@ bool MatrixPanel_I2S_DMA::allocateDMAmemory()
       ++frame_buffer[fb].rows;
     }
   }
-  ESP_LOGI("I2S-DMA", "Allocating %d bytes memory for DMA BCM framebuffer(s).", allocated_fb_memory);
+  ESP_LOGI("I2S-DMA", "Allocating %zu bytes memory for DMA BCM framebuffer(s).", allocated_fb_memory);
 
   // calculate the lowest LSBMSB_TRANSITION_BIT value that will fit in memory that will meet or exceed the configured refresh rate
   
@@ -316,6 +316,64 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
  *
  *  Note: If you change the brightness with setBrightness() you MUST then clearScreen() and repaint / flush the entire framebuffer.
  */
+
+uint16_t IRAM_ATTR MatrixPanel_I2S_DMA::getMatrixDMABuffer(uint16_t x_coord, uint16_t y_coord)
+{
+  if (!initialized)
+    return 0;
+
+  /* 1) Check that the co-ordinates are within range, or it'll break everything big time.
+   * Valid co-ordinates are from 0 to (MATRIX_XXXX-1)
+   */
+  if (x_coord >= PIXELS_PER_ROW || y_coord >= m_cfg.mx_height)
+  {
+    return 0;
+  }
+  x_coord = ESP32_TX_FIFO_POSITION_ADJUST(x_coord);
+
+  uint16_t _colourbitclear = BITMASK_RGB1_CLEAR, _colourbitoffset = 0;
+
+  if (y_coord >= ROWS_PER_FRAME)
+  { // if we are drawing to the bottom part of the panel
+    _colourbitoffset = BITS_RGB2_OFFSET;
+    _colourbitclear = BITMASK_RGB2_CLEAR;
+    y_coord -= ROWS_PER_FRAME;
+  }
+  uint16_t RGB_output_bits = 0;
+  // Iterating through colour depth bits, which we assume are 8 bits per RGB subpixel (24bpp)
+  uint8_t colour_depth_idx = m_cfg.getPixelColorDepthBits();
+  do
+  {
+    --colour_depth_idx;
+
+    uint16_t mask = PIXEL_COLOR_MASK_BIT(colour_depth_idx, MASK_OFFSET);
+    
+
+    /* Per the .h file, the order of the output RGB bits is:
+     * BIT_B2, BIT_G2, BIT_R2,    BIT_B1, BIT_G1, BIT_R1     */
+    // RGB_output_bits |= (bool)(blue16 & mask); // --B
+    // RGB_output_bits <<= 1;
+    // RGB_output_bits |= (bool)(green16 & mask); // -BG
+    // RGB_output_bits <<= 1;
+    // RGB_output_bits |= (bool)(red16 & mask); // BGR
+    // RGB_output_bits <<= _colourbitoffset;    // shift colour bits to the required position
+
+    // Get the contents at this address,
+    // it would represent a vector pointing to the full row of pixels for the specified colour depth bit at Y coordinate
+    ESP32_I2S_DMA_STORAGE_TYPE *p = getRowDataPtr(y_coord, colour_depth_idx, back_buffer_id);
+
+    // We need to update the correct uint16_t word in the rowBitStruct array pointing to a specific pixel at X - coordinate
+    // p[x_coord] &= _colourbitclear; // reset RGB bits
+    // p[x_coord] |= RGB_output_bits; // set new RGB bits
+    RGB_output_bits = p[x_coord] & mask;
+
+#if defined(SPIRAM_DMA_BUFFER)
+    Cache_WriteBack_Addr((uint32_t)&p[x_coord], sizeof(ESP32_I2S_DMA_STORAGE_TYPE));
+#endif
+
+  } while (colour_depth_idx); // end of colour depth loop (8)
+  return  RGB_output_bits;
+}
 
 /** @brief - Update pixel at specific co-ordinate in the DMA buffer
  *  this is the main method used to update DMA buffer on pixel-by-pixel level so it must be fast, real fast!

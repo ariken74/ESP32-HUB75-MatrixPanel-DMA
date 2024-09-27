@@ -13,10 +13,10 @@
 #include "platforms/platform_detect.hpp"
 
 #ifdef USE_GFX_LITE
-  // Slimmed version of Adafruit GFX + FastLED: https://github.com/mrcodetastic/GFX_Lite
-  #include "GFX_Lite.h" 
+// Slimmed version of Adafruit GFX + FastLED: https://github.com/mrcodetastic/GFX_Lite
+#include "GFX_Lite.h"
 #elif !defined NO_GFX
-  #include "Adafruit_GFX.h" // Adafruit class with all the other stuff
+#include "Adafruit_GFX.h" // Adafruit class with all the other stuff
 #endif
 
 /*******************************************************************************************
@@ -136,10 +136,10 @@ struct rowBitStruct
   const bool double_buff;
   ESP32_I2S_DMA_STORAGE_TYPE *data;
 
-  /** @brief 
+  /** @brief
    * Returns size (in bytes) of row of data vectorfor a SINGLE buff for the number of colour depths requested
-   * 
-   * default - Returns full data vector size for a SINGLE buff. 
+   *
+   * default - Returns full data vector size for a SINGLE buff.
    *           You should only pass either PIXEL_COLOR_DEPTH_BITS or '1' to this
    *
    */
@@ -152,7 +152,7 @@ struct rowBitStruct
 
   /** @brief
    * Returns pointer to the row's data vector beginning at pixel[0] for _dpth colour bit
-   * 
+   *
    * NOTE: this call might be very slow in loops. Due to poor instruction caching in esp32 it might be required a reread from flash
    * every loop cycle, better use inlined #define instead in such cases
    */
@@ -257,7 +257,7 @@ struct HUB75_I2S_CFG
     HZ_10M = 8000000,
     HZ_15M = 16000000, // for compatability
     HZ_16M = 16000000,
-    HZ_20M = 20000000 // for compatability  
+    HZ_20M = 20000000 // for compatability
   };
 
   //
@@ -319,14 +319,9 @@ struct HUB75_I2S_CFG
           R1_PIN_DEFAULT, G1_PIN_DEFAULT, B1_PIN_DEFAULT, R2_PIN_DEFAULT, G2_PIN_DEFAULT, B2_PIN_DEFAULT,
           A_PIN_DEFAULT, B_PIN_DEFAULT, C_PIN_DEFAULT, D_PIN_DEFAULT, E_PIN_DEFAULT,
           LAT_PIN_DEFAULT, OE_PIN_DEFAULT, CLK_PIN_DEFAULT},
-      shift_driver _drv = SHIFTREG, 
-      bool _dbuff = false, 
-      clk_speed _i2sspeed = HZ_8M,
+      shift_driver _drv = SHIFTREG, bool _dbuff = false, clk_speed _i2sspeed = HZ_8M,
       uint8_t _latblk = DEFAULT_LAT_BLANKING, // Anything > 1 seems to cause artefacts on ICS panels
-      bool _clockphase = true, 
-      uint16_t _min_refresh_rate = 60, 
-      uint8_t _pixel_color_depth_bits = PIXEL_COLOR_DEPTH_BITS_DEFAULT) 
-      : mx_width(_w), mx_height(_h), chain_length(_chain), gpio(_pinmap), driver(_drv), double_buff(_dbuff), i2sspeed(_i2sspeed), latch_blanking(_latblk), clkphase(_clockphase), min_refresh_rate(_min_refresh_rate)
+      bool _clockphase = true, uint16_t _min_refresh_rate = 60, uint8_t _pixel_color_depth_bits = PIXEL_COLOR_DEPTH_BITS_DEFAULT) : mx_width(_w), mx_height(_h), chain_length(_chain), gpio(_pinmap), driver(_drv), double_buff(_dbuff), i2sspeed(_i2sspeed), latch_blanking(_latblk), clkphase(_clockphase), min_refresh_rate(_min_refresh_rate)
   {
     setPixelColorDepthBits(_pixel_color_depth_bits);
   }
@@ -499,14 +494,13 @@ public:
   {
     uint8_t r, g, b;
     color565to888(color, r, g, b);
-    
+
     int16_t w = 1;
     transform(x, y, w, h);
     if (h > w)
       vlineDMA(x, y, h, r, g, b);
     else
       hlineDMA(x, y, w, r, g, b);
-
   }
   // rgb888 overload
   virtual inline void drawFastVLine(int16_t x, int16_t y, int16_t h, uint8_t r, uint8_t g, uint8_t b)
@@ -534,7 +528,6 @@ public:
       vlineDMA(x, y, h, r, g, b);
     else
       hlineDMA(x, y, w, r, g, b);
-
   }
   // rgb888 overload
   virtual inline void drawFastHLine(int16_t x, int16_t y, int16_t w, uint8_t r, uint8_t g, uint8_t b)
@@ -555,18 +548,16 @@ public:
   {
     uint8_t r, g, b;
     color565to888(color, r, g, b);
-    
+
     transform(x, y, w, h);
     fillRectDMA(x, y, w, h, r, g, b);
-    
   }
   // rgb888 overload
   virtual inline void fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t r, uint8_t g, uint8_t b)
   {
-    
+
     transform(x, y, w, h);
     fillRectDMA(x, y, w, h, r, g, b);
-    
   }
 #endif
 
@@ -580,8 +571,8 @@ public:
 #endif
 
 #ifdef NO_GFX
-    inline int16_t width() const { return m_cfg.mx_width * m_cfg.chain_length; }
-    inline int16_t height() const { return m_cfg.mx_height; }
+  inline int16_t width() const { return m_cfg.mx_width * m_cfg.chain_length; }
+  inline int16_t height() const { return m_cfg.mx_height; }
 #endif
 
   void drawIcon(int *ico, int16_t x, int16_t y, int16_t cols, int16_t rows);
@@ -608,15 +599,122 @@ public:
     {
       return;
     }
-	
-    dma_bus.flip_dma_output_buffer(back_buffer_id);
-	
-	//back_buffer_id ^= 1;
-	back_buffer_id = back_buffer_id^1;
-    fb = &frame_buffer[back_buffer_id];	
-	
 
-	
+    dma_bus.flip_dma_output_buffer(back_buffer_id);
+
+    // back_buffer_id ^= 1;
+    back_buffer_id = back_buffer_id ^ 1;
+    fb = &frame_buffer[back_buffer_id];
+  }
+
+  inline void copyDMABuffer()
+  {
+    for (int row = 0; row < ROWS_PER_FRAME; row++)
+    {
+      // first set of data is LSB through MSB, single pass (IF TOTAL SIZE < DMA_MAX) - all colour bits are displayed once, which takes care of everything below and including LSBMSB_TRANSITION_BIT
+      // NOTE: size must be less than DMA_MAX - worst case for library: 16-bpp with 256 pixels per row would exceed this, need to break into two
+      // link_dma_desc(&dmadesc_a[current_dmadescriptor_offset], previous_dmadesc_a, dma_buff.rowBits[row]->getDataPtr(), dma_buff.rowBits[row]->size(num_dma_payload_colour_depths));
+      //   previous_dmadesc_a = &dmadesc_a[current_dmadescriptor_offset];
+
+      memcpy(frame_buffer[back_buffer_id].rowBits[row]->getDataPtr(0, 0), frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
+    }
+  }
+
+  inline int getColorDepthSize()
+  {
+    return frame_buffer[0].rowBits[0]->getColorDepthSize() * ROWS_PER_FRAME;
+  }
+
+  inline uint16_t *dumpDMABuffer()
+  {
+    uint16_t *codedBitmap = (uint16_t *)calloc((frame_buffer[0].rowBits[0]->getColorDepthSize() / sizeof(uint16_t)) * ROWS_PER_FRAME, sizeof(uint16_t));
+    if (codedBitmap == nullptr)
+    {
+      Serial.println("NO MEM");
+      return nullptr;
+    }
+    // uint16_t *codedBitmap = (uint16_t *)calloc(1, frame_buffer[0].rowBits[0]->getColorDepthSize() * ROWS_PER_FRAME);
+    int r = 0;
+    for (int row = 0; row < ROWS_PER_FRAME; row++)
+    {
+      memcpy(codedBitmap + r, frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
+      r += frame_buffer[0].rowBits[row]->getColorDepthSize() / sizeof(uint16_t);
+    }
+    // int z = 0;
+    // for (size_t i = 0; i < frame_buffer[0].rowBits[0]->getColorDepthSize(); i+=1)
+    // {
+    //   codedBitmap[z] = codedBitmap16[i] & 0xFF;
+    //   codedBitmap[z+1] = codedBitmap16[i] >> 8;
+    //   z+=2;
+    // }
+
+    return (uint16_t *)codedBitmap;
+  }
+  uint8_t *codedBitmap = (uint8_t *)calloc(MATRIX_WIDTH * MATRIX_HEIGHT * 3, sizeof(uint8_t));
+  
+  inline uint8_t *dumpDMABuffer8()
+  {
+    
+    if (codedBitmap == nullptr)
+    {
+      Serial.println("NO MEM");
+      return nullptr;
+    }
+    // uint16_t *codedBitmap = (uint16_t *)calloc(1, frame_buffer[0].rowBits[0]->getColorDepthSize() * ROWS_PER_FRAME);
+    int r = 0;
+    int offset = 0;
+    memset(codedBitmap, 0, MATRIX_WIDTH * MATRIX_HEIGHT * 3);
+    for (int row = 0; row < ROWS_PER_FRAME; row++)
+    {
+      u_int16_t *pp = (u_int16_t *)frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0);
+      int colorDepth = m_cfg.getPixelColorDepthBits();
+      for (int col = 0; col < 64 * 1; col++)
+      {
+       
+        uint8_t red1 = 0,
+            blue1 = 0,
+            green1 = 0;
+        uint8_t red2 = 0,
+            blue2 = 0,
+            green2 = 0;
+        int pixelRow = row * 64;
+        int pixel = col + pixelRow;
+        int pixelUp = pixel * 3;
+        int pixelDown = (pixel * 3) + (64 * 16 * 3);
+        int pixelBit = col;
+        for (int bit = 0; bit < colorDepth; bit++)
+        {
+          int pixelOffset = pixelBit + bit * 64;
+          codedBitmap[pixelUp] |= (pp[pixelOffset] & 0b1) << bit;
+          codedBitmap[pixelUp + 1] |= ((pp[pixelOffset] & 0b10) >> 1) << bit;
+          codedBitmap[pixelUp + 2] |= ((pp[pixelOffset] & 0b100) >> 2) << bit;
+          codedBitmap[pixelDown] |= ((pp[pixelOffset] & 0b1000) >> 3) << bit;
+          codedBitmap[pixelDown + 1] |= ((pp[pixelOffset] & 0b10000) >> 4) << bit;
+          codedBitmap[pixelDown + 2] |= ((pp[pixelOffset] & 0b100000) >> 5) << bit;
+        }
+        
+        // codedBitmap[pixelUp] = red1;
+        // codedBitmap[pixelUp + 1] = green1;
+        // codedBitmap[pixelUp + 2] = blue1;
+        // codedBitmap[pixelDown] = red2;
+        // codedBitmap[pixelDown + 1] = green2;
+        // codedBitmap[pixelDown + 2] = blue2;
+        // console.log(u[pixel + 64 * 16], pp[pixelBit].toString(2));
+      }
+      
+
+      // memcpy(codedBitmap + r, frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
+      // r += frame_buffer[0].rowBits[row]->getColorDepthSize() / sizeof(uint16_t);
+    }
+    // int z = 0;
+    // for (size_t i = 0; i < frame_buffer[0].rowBits[0]->getColorDepthSize(); i+=1)
+    // {
+    //   codedBitmap[z] = codedBitmap16[i] & 0xFF;
+    //   codedBitmap[z+1] = codedBitmap16[i] >> 8;
+    //   z+=2;
+    // }
+
+    return codedBitmap;
   }
 
   /**
@@ -696,7 +794,7 @@ public:
     // i2s_parallel_stop_dma(ESP32_I2S_DEVICE);
     dma_bus.dma_transfer_stop();
   }
-
+  uint16_t getMatrixDMABuffer(uint16_t x_coord, uint16_t y_coord);
   // ------- PROTECTED -------
   // those might be useful for child classes, like VirtualMatrixPanel
 protected:
@@ -721,14 +819,14 @@ protected:
    */
   inline void resetbuffers()
   {
-    clearFrameBuffer(0);        
-    brtCtrlOEv2(brightness, 0); 
+    clearFrameBuffer(0);
+    brtCtrlOEv2(brightness, 0);
 
-    if (m_cfg.double_buff) {
-		
-      clearFrameBuffer(1);        
+    if (m_cfg.double_buff)
+    {
+
+      clearFrameBuffer(1);
       brtCtrlOEv2(brightness, 1);
-
     }
   }
 
@@ -785,7 +883,7 @@ private:
   /**
    * @brief - DP3246-family chips initialization routine
    */
-  void dp3246init(const HUB75_I2S_CFG& _cfg);
+  void dp3246init(const HUB75_I2S_CFG &_cfg);
 
   /**
    * @brief - reset OE bits in DMA buffer in a way to control brightness
@@ -849,7 +947,6 @@ protected:
   Bus_Parallel16 dma_bus;
 
 private:
-
   // Matrix i2s settings
   HUB75_I2S_CFG m_cfg;
 
@@ -863,9 +960,9 @@ private:
   frameStruct frame_buffer[2];
   frameStruct *fb; // What framebuffer we are writing pixel changes to? (pointer to either frame_buffer[0] or frame_buffer[1] basically ) used within updateMatrixDMABuffer(...)
 
-  volatile int back_buffer_id = 0;      // If using double buffer, which one is NOT active (ie. being displayed) to write too?
-  int brightness = 128;        // If you get ghosting... reduce brightness level. ((60/64)*255) seems to be the limit before ghosting on a 64 pixel wide physical panel for some panels.
-  int lsbMsbTransitionBit = 0; // For colour depth calculations
+  volatile int back_buffer_id = 0; // If using double buffer, which one is NOT active (ie. being displayed) to write too?
+  int brightness = 128;            // If you get ghosting... reduce brightness level. ((60/64)*255) seems to be the limit before ghosting on a 64 pixel wide physical panel for some panels.
+  int lsbMsbTransitionBit = 0;     // For colour depth calculations
 
   /* ESP32-HUB75-MatrixPanel-I2S-DMA functioning constants
    * we should not those once object instance initialized it's DMA structs
