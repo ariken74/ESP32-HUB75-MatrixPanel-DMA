@@ -20,7 +20,7 @@
  * Irrelevant for ESP32-S2 the way the FIFO ordering works is different - refer to page 679 of S2 technical reference manual
  */
 #if defined(ESP32_THE_ORIG)
-#define ESP32_TX_FIFO_POSITION_ADJUST(x_coord) (((x_coord)&1U) ? (x_coord - 1) : (x_coord + 1))
+#define ESP32_TX_FIFO_POSITION_ADJUST(x_coord) (((x_coord) & 1U) ? (x_coord - 1) : (x_coord + 1))
 #else
 #define ESP32_TX_FIFO_POSITION_ADJUST(x_coord) x_coord
 #endif
@@ -63,16 +63,16 @@ bool MatrixPanel_I2S_DMA::allocateDMAmemory()
       }
 
       allocated_fb_memory += ptr->getColorDepthSize(); // byte required to display all colour depths for the rows shown at the same time
-      frame_buffer[fb].rowBits.emplace_back(ptr); // save new rowBitStruct pointer into rows vector
+      frame_buffer[fb].rowBits.emplace_back(ptr);      // save new rowBitStruct pointer into rows vector
       ++frame_buffer[fb].rows;
     }
   }
   ESP_LOGI("I2S-DMA", "Allocating %zu bytes memory for DMA BCM framebuffer(s).", allocated_fb_memory);
 
   // calculate the lowest LSBMSB_TRANSITION_BIT value that will fit in memory that will meet or exceed the configured refresh rate
-  
-//#define FORCE_COLOR_DEPTH 1
-  
+
+  // #define FORCE_COLOR_DEPTH 1
+
 #if !defined(FORCE_COLOR_DEPTH)
 
   ESP_LOGI("I2S-DMA", "Minimum visual refresh rate (scan rate from panel top to bottom) requested: %d Hz", m_cfg.min_refresh_rate);
@@ -160,16 +160,14 @@ bool MatrixPanel_I2S_DMA::allocateDMAmemory()
 
 } // end allocateDMAmemory()
 
-
-
 /*
-// Version 2.0 March 2023 
+// Version 2.0 March 2023
 int MatrixPanel_I2S_DMA::create_descriptor_links(void *data, size_t size, bool dmadesc_b, bool countonly)
 {
     int len = size;
     uint8_t *data2 = (uint8_t *)data;
 
-    int n = 0;    
+    int n = 0;
     while (len)
     {
         int dmalen = len;
@@ -177,7 +175,7 @@ int MatrixPanel_I2S_DMA::create_descriptor_links(void *data, size_t size, bool d
             dmalen = DMA_MAX;
 
           if (!countonly)
-            dma_bus.create_dma_desc_link(data2, dmalen, dmadesc_b);                
+            dma_bus.create_dma_desc_link(data2, dmalen, dmadesc_b);
 
         len -= dmalen;
         data2 += dmalen;
@@ -203,8 +201,7 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
   }
   */
 
-
- // Fill DMA linked lists for both frames (as in, halves of the HUB75 panel) in sequence (top to bottom) 
+  // Fill DMA linked lists for both frames (as in, halves of the HUB75 panel) in sequence (top to bottom)
   for (int row = 0; row < ROWS_PER_FRAME; row++)
   {
     // first set of data is LSB through MSB, single pass (IF TOTAL SIZE < DMA_MAX) - all colour bits are displayed once, which takes care of everything below and including LSBMSB_TRANSITION_BIT
@@ -237,7 +234,7 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
         current_dmadescriptor_offset++;
 
       } // additional linked list items
-    }   // row depth struct
+    } // row depth struct
 
     for (int i = lsbMsbTransitionBit + 1; i < m_cfg.getPixelColorDepthBits(); i++)
     {
@@ -257,7 +254,7 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
         current_dmadescriptor_offset++;
 
       } // end colour depth ^ 2 linked list
-    }   // end colour depth loop
+    } // end colour depth loop
 
   } // end frame rows
 
@@ -268,8 +265,8 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
   //
   auto bus_cfg = dma_bus.config(); // バス設定用の構造体を取得します。
 
-  bus_cfg.bus_freq    = m_cfg.i2sspeed;
-  bus_cfg.pin_wr      = m_cfg.gpio.clk;
+  bus_cfg.bus_freq = m_cfg.i2sspeed;
+  bus_cfg.pin_wr = m_cfg.gpio.clk;
   bus_cfg.invert_pclk = m_cfg.clkphase;
 
   bus_cfg.pin_d0 = m_cfg.gpio.r1;
@@ -303,8 +300,13 @@ void MatrixPanel_I2S_DMA::configureDMA(const HUB75_I2S_CFG &_cfg)
 
   // i2s_parallel_send_dma(ESP32_I2S_DEVICE, &dmadesc_a[0]);
   ESP_LOGI("I2S-DMA", "DMA setup completed");
-
+  async_memcpy_config_t config = ASYNC_MEMCPY_DEFAULT_CONFIG();
+  // update the maximum data stream supported by underlying DMA engine
+  config.backlog = 8;
+  
+  esp_async_memcpy_install(&config, &driver); // install driver with default DMA engine
 } // end initMatrixDMABuff
+
 
 /* There are 'bits' set in the frameStruct that we simply don't need to set every single time we change a pixel / DMA buffer co-ordinate.
  *  For example, the bits that determine the address lines, we don't need to set these every time. Once they're in place, and assuming we
@@ -347,7 +349,6 @@ uint16_t IRAM_ATTR MatrixPanel_I2S_DMA::getMatrixDMABuffer(uint16_t x_coord, uin
     --colour_depth_idx;
 
     uint16_t mask = PIXEL_COLOR_MASK_BIT(colour_depth_idx, MASK_OFFSET);
-    
 
     /* Per the .h file, the order of the output RGB bits is:
      * BIT_B2, BIT_G2, BIT_R2,    BIT_B1, BIT_G1, BIT_R1     */
@@ -372,7 +373,7 @@ uint16_t IRAM_ATTR MatrixPanel_I2S_DMA::getMatrixDMABuffer(uint16_t x_coord, uin
 #endif
 
   } while (colour_depth_idx); // end of colour depth loop (8)
-  return  RGB_output_bits;
+  return RGB_output_bits;
 }
 
 /** @brief - Update pixel at specific co-ordinate in the DMA buffer
@@ -476,13 +477,13 @@ void MatrixPanel_I2S_DMA::updateMatrixDMABuffer(uint8_t red, uint8_t green, uint
   /* https://ledshield.wordpress.com/2012/11/13/led-brightness-to-your-eye-gamma-correction-no/ */
   uint16_t red16, green16, blue16;
 #ifndef NO_CIE1931
-  red16 	= lumConvTab[red];
-  green16 	= lumConvTab[green];
-  blue16 	= lumConvTab[blue];
+  red16 = lumConvTab[red];
+  green16 = lumConvTab[green];
+  blue16 = lumConvTab[blue];
 #else
-  red16 	= red << 8;
-  green16 	= green << 8;
-  blue16 	= blue << 8;
+  red16 = red << 8;
+  green16 = green << 8;
+  blue16 = blue << 8;
 #endif
 
   for (uint8_t colour_depth_idx = 0; colour_depth_idx < m_cfg.getPixelColorDepthBits(); colour_depth_idx++) // colour depth - 8 iterations
@@ -529,7 +530,7 @@ void MatrixPanel_I2S_DMA::updateMatrixDMABuffer(uint8_t red, uint8_t green, uint
       } while (x_coord);
 
     } while (matrix_frame_parallel_row); // end row iteration
-  }                                      // colour depth loop (8)
+  } // colour depth loop (8)
 } // updateMatrixDMABuffer (full frame paint)
 
 /**
@@ -573,7 +574,7 @@ void MatrixPanel_I2S_DMA::clearFrameBuffer(bool _buff_id)
         // https://github.com/mrfaptastic/ESP32-HUB75-MatrixPanel-I2S-DMA/issues/164
         row[x_pixel] = abcde & (0x18 << BITS_ADDR_OFFSET); // mask out the bottom 3 bits which are the clk di bk inputs
       }
-      else if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368) 
+      else if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368)
       {
         row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel)] = 0x0000;
       }
@@ -597,7 +598,7 @@ void MatrixPanel_I2S_DMA::clearFrameBuffer(bool _buff_id)
         // https://github.com/mrfaptastic/ESP32-HUB75-MatrixPanel-I2S-DMA/issues/164
         row[x_pixel] = abcde & (0x18 << BITS_ADDR_OFFSET); // mask out the bottom 3 bits which are the clk di bk inputs
       }
-      else if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368) 
+      else if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368)
       {
         row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel)] = 0x0000;
       }
@@ -626,12 +627,12 @@ void MatrixPanel_I2S_DMA::clearFrameBuffer(bool _buff_id)
     } // end SM5266P
 
     // row selection for SM5368 shift regs with ABC-only addressing. A is row clk, B is BK and C is row data
-    if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368) 
+    if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368)
     {
-      x_pixel = fb->rowBits[row_idx]->width - 1;                                                                        // last pixel in first block)
-      uint16_t c = (row_idx == 0) ? BIT_C : 0x0000;                                                                     // set row data (C) when row==0, then push through shift regs for all other rows
-      row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel - 1)] |= c;                                                             // set row data
-      row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel + 0)] |= c | BIT_A | BIT_B;                                             // set row clk and bk, carry row data
+      x_pixel = fb->rowBits[row_idx]->width - 1;                            // last pixel in first block)
+      uint16_t c = (row_idx == 0) ? BIT_C : 0x0000;                         // set row data (C) when row==0, then push through shift regs for all other rows
+      row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel - 1)] |= c;                 // set row data
+      row[ESP32_TX_FIFO_POSITION_ADJUST(x_pixel + 0)] |= c | BIT_A | BIT_B; // set row clk and bk, carry row data
     } // end DP3246_SM5368
 
     // let's set LAT/OE control bits for specific pixels in each colour_index subrows
@@ -645,12 +646,12 @@ void MatrixPanel_I2S_DMA::clearFrameBuffer(bool _buff_id)
       row = fb->rowBits[row_idx]->getDataPtr(colouridx, -1);
 
       // DP3246 needs the latch high for 3 clock cycles, so start 2 cycles earlier
-      if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368) 
+      if (m_cfg.driver == HUB75_I2S_CFG::DP3246_SM5368)
       {
-        row[ESP32_TX_FIFO_POSITION_ADJUST(fb->rowBits[row_idx]->width - 3)] |= BIT_LAT;   // DP3246 needs 3 clock cycle latch 
-        row[ESP32_TX_FIFO_POSITION_ADJUST(fb->rowBits[row_idx]->width - 2)] |= BIT_LAT;   // DP3246 needs 3 clock cycle latch 
+        row[ESP32_TX_FIFO_POSITION_ADJUST(fb->rowBits[row_idx]->width - 3)] |= BIT_LAT; // DP3246 needs 3 clock cycle latch
+        row[ESP32_TX_FIFO_POSITION_ADJUST(fb->rowBits[row_idx]->width - 2)] |= BIT_LAT; // DP3246 needs 3 clock cycle latch
       } // DP3246_SM5368
-      
+
       row[ESP32_TX_FIFO_POSITION_ADJUST(fb->rowBits[row_idx]->width - 1)] |= BIT_LAT; // -1 pixel to compensate array index starting at 0
 
       // ESP32_TX_FIFO_POSITION_ADJUST(dma_buff.rowBits[row_idx]->width - 1)
@@ -742,7 +743,7 @@ void MatrixPanel_I2S_DMA::brtCtrlOEv2(uint8_t brt, const int _buff_id)
 // switch pointer to a row for a specific colour index
 #if defined(SPIRAM_DMA_BUFFER)
     ESP32_I2S_DMA_STORAGE_TYPE *row_hack = fb->rowBits[row_idx]->getDataPtr(0, _buff_id);
-    //Cache_WriteBack_Addr((uint32_t)row_hack, sizeof(ESP32_I2S_DMA_STORAGE_TYPE) * ((fb->rowBits[row_idx]->width * fb->rowBits[row_idx]->colour_depth) - 1));
+    // Cache_WriteBack_Addr((uint32_t)row_hack, sizeof(ESP32_I2S_DMA_STORAGE_TYPE) * ((fb->rowBits[row_idx]->width * fb->rowBits[row_idx]->colour_depth) - 1));
     Cache_WriteBack_Addr((uint32_t)row_hack, fb->rowBits[row_idx]->getColorDepthSize());
 #endif
   } while (row_idx);
@@ -904,9 +905,9 @@ void MatrixPanel_I2S_DMA::hlineDMA(int16_t x_coord, int16_t y_coord, int16_t l, 
       */
       uint16_t &v = p[ESP32_TX_FIFO_POSITION_ADJUST(_x)];
 
-      v &= _colourbitclear;   // reset colour bits
-      v |= RGB_output_bits;   // set new colour bits
-    } while (_l);             // iterate pixels in a row
+      v &= _colourbitclear; // reset colour bits
+      v |= RGB_output_bits; // set new colour bits
+    } while (_l); // iterate pixels in a row
   } while (colour_depth_idx); // end of colour depth loop (8)
 } // hlineDMA()
 
@@ -997,7 +998,7 @@ void MatrixPanel_I2S_DMA::vlineDMA(int16_t x_coord, int16_t y_coord, int16_t l, 
       p[x_coord] &= _colourbitclear; // reset RGB bits
       p[x_coord] |= RGB_output_bits; // set new RGB bits
       ++_y;
-    } while (++_l != l);      // iterate pixels in a col
+    } while (++_l != l); // iterate pixels in a col
   } while (colour_depth_idx); // end of colour depth loop (8)
 } // vlineDMA()
 

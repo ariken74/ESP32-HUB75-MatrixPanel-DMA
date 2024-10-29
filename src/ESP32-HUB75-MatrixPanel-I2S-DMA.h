@@ -18,6 +18,7 @@
 #elif !defined NO_GFX
 #include "Adafruit_GFX.h" // Adafruit class with all the other stuff
 #endif
+#include <esp_async_memcpy.h>
 
 /*******************************************************************************************
  * COMPILE-TIME OPTIONS - MUST BE PROVIDED as part of PlatformIO project build_flags.      *
@@ -560,7 +561,14 @@ public:
     fillRectDMA(x, y, w, h, r, g, b);
   }
 #endif
+  static bool my_async_memcpy_cb(async_memcpy_handle_t mcp_hdl, async_memcpy_event_t *event, void *cb_args)
+  {
 
+    SemaphoreHandle_t sem = (SemaphoreHandle_t)cb_args;
+    BaseType_t high_task_wakeup = pdFALSE;
+    xSemaphoreGiveFromISR(sem, &high_task_wakeup); // high_task_wakeup set to pdTRUE if some high priority task unblocked
+    return high_task_wakeup == pdTRUE;
+  }
   void fillScreenRGB888(uint8_t r, uint8_t g, uint8_t b);
   void drawPixelRGB888(int16_t x, int16_t y, uint8_t r, uint8_t g, uint8_t b);
 
@@ -606,7 +614,8 @@ public:
     back_buffer_id = back_buffer_id ^ 1;
     fb = &frame_buffer[back_buffer_id];
   }
-
+  async_memcpy_handle_t driver = NULL;
+  SemaphoreHandle_t my_semaphore = xSemaphoreCreateBinary();
   inline void copyDMABuffer()
   {
     for (int row = 0; row < ROWS_PER_FRAME; row++)
@@ -615,9 +624,15 @@ public:
       // NOTE: size must be less than DMA_MAX - worst case for library: 16-bpp with 256 pixels per row would exceed this, need to break into two
       // link_dma_desc(&dmadesc_a[current_dmadescriptor_offset], previous_dmadesc_a, dma_buff.rowBits[row]->getDataPtr(), dma_buff.rowBits[row]->size(num_dma_payload_colour_depths));
       //   previous_dmadesc_a = &dmadesc_a[current_dmadescriptor_offset];
+      
 
-      memcpy(frame_buffer[back_buffer_id].rowBits[row]->getDataPtr(0, 0), frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
+      // Called from user's context
+      esp_async_memcpy(driver, frame_buffer[back_buffer_id].rowBits[row]->getDataPtr(0, 0), frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize(), my_async_memcpy_cb, my_semaphore);
+      // Do something else here
+      
+      // memcpy(frame_buffer[back_buffer_id].rowBits[row]->getDataPtr(0, 0), frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
     }
+    xSemaphoreTake(my_semaphore, portMAX_DELAY);
   }
 
   inline int getColorDepthSize()
@@ -637,9 +652,10 @@ public:
     int r = 0;
     for (int row = 0; row < ROWS_PER_FRAME; row++)
     {
-      memcpy(codedBitmap + r, frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
+      esp_async_memcpy(driver, codedBitmap + r, frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize(), my_async_memcpy_cb, my_semaphore);
       r += frame_buffer[0].rowBits[row]->getColorDepthSize() / sizeof(uint16_t);
     }
+    xSemaphoreTake(my_semaphore, portMAX_DELAY);
     // int z = 0;
     // for (size_t i = 0; i < frame_buffer[0].rowBits[0]->getColorDepthSize(); i+=1)
     // {
@@ -651,10 +667,10 @@ public:
     return (uint16_t *)codedBitmap;
   }
   uint8_t *codedBitmap = (uint8_t *)calloc(MATRIX_WIDTH * MATRIX_HEIGHT * 3, sizeof(uint8_t));
-  
+
   inline uint8_t *dumpDMABuffer8()
   {
-    
+
     if (codedBitmap == nullptr)
     {
       Serial.println("NO MEM");
@@ -663,20 +679,20 @@ public:
     // uint16_t *codedBitmap = (uint16_t *)calloc(1, frame_buffer[0].rowBits[0]->getColorDepthSize() * ROWS_PER_FRAME);
     int r = 0;
     int offset = 0;
-    memset(codedBitmap, 0, MATRIX_WIDTH * MATRIX_HEIGHT * 3);
+    // memset(codedBitmap, 0, MATRIX_WIDTH * MATRIX_HEIGHT * 3);
     for (int row = 0; row < ROWS_PER_FRAME; row++)
     {
       u_int16_t *pp = (u_int16_t *)frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0);
       int colorDepth = m_cfg.getPixelColorDepthBits();
       for (int col = 0; col < 64 * 1; col++)
       {
-       
-        uint8_t red1 = 0,
-            blue1 = 0,
-            green1 = 0;
-        uint8_t red2 = 0,
-            blue2 = 0,
-            green2 = 0;
+
+        // uint8_t red1 = 0,
+        //     blue1 = 0,
+        //     green1 = 0;
+        // uint8_t red2 = 0,
+        //     blue2 = 0,
+        //     green2 = 0;
         int pixelRow = row * 64;
         int pixel = col + pixelRow;
         int pixelUp = pixel * 3;
@@ -685,6 +701,8 @@ public:
         for (int bit = 0; bit < colorDepth; bit++)
         {
           int pixelOffset = pixelBit + bit * 64;
+          memset(&codedBitmap[pixelUp], 0, 3);
+          memset(&codedBitmap[pixelDown], 0, 3);
           codedBitmap[pixelUp] |= (pp[pixelOffset] & 0b1) << bit;
           codedBitmap[pixelUp + 1] |= ((pp[pixelOffset] & 0b10) >> 1) << bit;
           codedBitmap[pixelUp + 2] |= ((pp[pixelOffset] & 0b100) >> 2) << bit;
@@ -692,7 +710,9 @@ public:
           codedBitmap[pixelDown + 1] |= ((pp[pixelOffset] & 0b10000) >> 4) << bit;
           codedBitmap[pixelDown + 2] |= ((pp[pixelOffset] & 0b100000) >> 5) << bit;
         }
-        
+
+        yield();
+
         // codedBitmap[pixelUp] = red1;
         // codedBitmap[pixelUp + 1] = green1;
         // codedBitmap[pixelUp + 2] = blue1;
@@ -701,7 +721,6 @@ public:
         // codedBitmap[pixelDown + 2] = blue2;
         // console.log(u[pixel + 64 * 16], pp[pixelBit].toString(2));
       }
-      
 
       // memcpy(codedBitmap + r, frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0), frame_buffer[0].rowBits[row]->getColorDepthSize());
       // r += frame_buffer[0].rowBits[row]->getColorDepthSize() / sizeof(uint16_t);
