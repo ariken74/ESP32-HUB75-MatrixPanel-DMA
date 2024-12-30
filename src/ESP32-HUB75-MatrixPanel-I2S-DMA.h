@@ -18,6 +18,7 @@
 #elif !defined NO_GFX
 #include "Adafruit_GFX.h" // Adafruit class with all the other stuff
 #endif
+#include <esp_async_memcpy.h>
 
 /*******************************************************************************************
  * COMPILE-TIME OPTIONS - MUST BE PROVIDED as part of PlatformIO project build_flags.      *
@@ -660,7 +661,7 @@ public:
     // uint16_t *codedBitmap = (uint16_t *)calloc(1, frame_buffer[0].rowBits[0]->getColorDepthSize() * ROWS_PER_FRAME);
     int r = 0;
     int offset = 0;
-    memset(codedBitmap, 0, MATRIX_WIDTH * MATRIX_HEIGHT * 3);
+    // memset(codedBitmap, 0, MATRIX_WIDTH * MATRIX_HEIGHT * 3);
     for (int row = 0; row < ROWS_PER_FRAME; row++)
     {
       u_int16_t *pp = (u_int16_t *)frame_buffer[back_buffer_id ^ 1].rowBits[row]->getDataPtr(0, 0);
