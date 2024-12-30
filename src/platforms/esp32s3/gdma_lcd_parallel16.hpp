@@ -89,9 +89,10 @@
 
 //----------------------------------------------------------------------------
 
-  class Bus_Parallel16 
-  {
-  public:
+class Bus_Parallel16 {
+    friend void configure_lcd_clock(Bus_Parallel16* bus);  // Add friend declaration
+
+public:
     Bus_Parallel16()
     {
 
@@ -151,12 +152,12 @@
 
      void flip_dma_output_buffer(int back_buffer_id);
 
-  private:
+private:
 
     config_t _cfg;
 
     volatile lcd_cam_dev_t* _dev;   
-    gdma_channel_handle_t dma_chan; 
+    gdma_channel_handle_t dma_chan = nullptr; 
 
     uint32_t _dmadesc_count  = 0;   // number of dma decriptors
 	

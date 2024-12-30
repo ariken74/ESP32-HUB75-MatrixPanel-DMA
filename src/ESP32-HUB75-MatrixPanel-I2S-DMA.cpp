@@ -34,40 +34,60 @@
 
 bool MatrixPanel_I2S_DMA::allocateDMAmemory()
 {
-
   ESP_LOGI("I2S-DMA", "Free heap: %zu", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
   ESP_LOGI("I2S-DMA", "Free SPIRAM: %zu", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
-  // Alright, theoretically we should be OK, so let us do this, so
-  // lets allocate a chunk of memory for each row (a row could span multiple panels if chaining is in place)
   ESP_LOGI("I2S-DMA", "allocating rowBitStructs with pixel_color_depth_bits of %d", m_cfg.getPixelColorDepthBits());
-  // iterate through number of rows, allocate memory for each
-  size_t allocated_fb_memory = 0;
 
+  // Calculate total required DMA buffer size
+  size_t row_size = PIXELS_PER_ROW * sizeof(ESP32_I2S_DMA_STORAGE_TYPE) * m_cfg.getPixelColorDepthBits();
+  size_t total_size = row_size * ROWS_PER_FRAME;
+  if (m_cfg.double_buff) {
+    total_size *= 2;
+  }
+
+  // Allocate static DMA capable buffer
+  ESP32_I2S_DMA_STORAGE_TYPE* dma_buffer = nullptr;
+  #if defined(SPIRAM_DMA_BUFFER)
+  dma_buffer = (ESP32_I2S_DMA_STORAGE_TYPE*)heap_caps_aligned_alloc(64, total_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  #else  
+  dma_buffer = (ESP32_I2S_DMA_STORAGE_TYPE*)heap_caps_malloc(total_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  #endif
+
+  if (!dma_buffer) {
+    ESP_LOGE("I2S-DMA", "Failed to allocate DMA buffer of size %d bytes", total_size);
+    return false;
+  }
+
+  ESP_LOGI("I2S-DMA", "Allocated %d bytes for DMA buffer at %p", total_size, dma_buffer);
+
+  size_t offset = 0;
   int fbs_required = (m_cfg.double_buff) ? 2 : 1;
-  for (int fb = 0; fb < (fbs_required); fb++)
-  {
+
+  // Set up frame buffers using sections of the allocated DMA buffer
+  for (int fb = 0; fb < fbs_required; fb++) {
     frame_buffer[fb].rowBits.reserve(ROWS_PER_FRAME);
 
-    for (int malloc_num = 0; malloc_num < ROWS_PER_FRAME; malloc_num++)
-    {
-      auto ptr = std::make_shared<rowBitStruct>(PIXELS_PER_ROW, m_cfg.getPixelColorDepthBits(), m_cfg.double_buff);
-
-      if (ptr->data == nullptr)
-      {
-        ESP_LOGE("I2S-DMA", "CRITICAL ERROR: Not enough memory for requested colour depth! Please reduce pixel_color_depth_bits value.\r\n");
-        ESP_LOGE("I2S-DMA", "Could not allocate rowBitStruct %d!.\r\n", malloc_num);
-
+    for (int malloc_num = 0; malloc_num < ROWS_PER_FRAME; malloc_num++) {
+      auto ptr = std::make_shared<rowBitStruct>(
+          PIXELS_PER_ROW,
+          m_cfg.getPixelColorDepthBits(),
+          m_cfg.double_buff,
+          (uint8_t*)(dma_buffer + offset)
+      );
+      
+      if (!ptr->data) {
+        ESP_LOGE("I2S-DMA", "Failed to initialize rowBitStruct %d", malloc_num);
+        heap_caps_free(dma_buffer);
         return false;
-        // TODO: should we release all previous rowBitStructs here???
       }
 
-      allocated_fb_memory += ptr->getColorDepthSize(); // byte required to display all colour depths for the rows shown at the same time
-      frame_buffer[fb].rowBits.emplace_back(ptr); // save new rowBitStruct pointer into rows vector
+      frame_buffer[fb].rowBits.emplace_back(ptr);
       ++frame_buffer[fb].rows;
+
+      offset += row_size / sizeof(ESP32_I2S_DMA_STORAGE_TYPE);
     }
   }
-  ESP_LOGI("I2S-DMA", "Allocating %zu bytes memory for DMA BCM framebuffer(s).", allocated_fb_memory);
 
   // calculate the lowest LSBMSB_TRANSITION_BIT value that will fit in memory that will meet or exceed the configured refresh rate
   

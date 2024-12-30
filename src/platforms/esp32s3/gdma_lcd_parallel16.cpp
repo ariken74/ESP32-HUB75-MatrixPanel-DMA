@@ -277,7 +277,7 @@
     // This uses a busy loop to wait for each DMA transfer to complete...
     // but the whole point of DMA is that one's code can do other work in
     // the interim. The CPU is totally free while the transfer runs!
-    while (LCD_CAM.lcd_user.lcd_start); // Wait for DMA completion callback
+    while (LCD_CAM.lcd_user.lcd_start) yield(); // Wait for DMA completion callback
 
     // After much experimentation, each of these steps is required to get
     // a clean start on the next LCD transfer:

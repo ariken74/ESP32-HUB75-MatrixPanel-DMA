@@ -45,7 +45,7 @@ endforeach()
 # Example to build with USE_GFX_ROOT or NO_GFX / just uncomment the appropriate line
 # target_compile_options(${COMPONENT_TARGET} PUBLIC -DUSE_GFX_ROOT)
 # target_compile_options(${COMPONENT_TARGET} PUBLIC -DNO_GFX)
-
+# target_compile_options(${COMPONENT_TARGET} PUBLIC -DSPIRAM_FRAMEBUFFER)
 # esp-idf does not have any GFX library support yet, so we need to define NO_GFX
 if(ARDUINO_ARCH_ESP32 OR CONFIG_ESP32_HUB75_USE_GFX)
 else()

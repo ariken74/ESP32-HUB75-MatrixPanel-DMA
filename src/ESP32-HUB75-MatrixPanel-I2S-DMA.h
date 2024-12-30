@@ -162,22 +162,19 @@ struct rowBitStruct
   inline ESP32_I2S_DMA_STORAGE_TYPE *getDataPtr(const uint8_t _dpth = 0, const bool buff_id = 0) { return &(data[_dpth * width]); };
 
   // constructor - allocates DMA-capable memory to hold the struct data
-  rowBitStruct(const size_t _width, const uint8_t _depth, const bool _dbuff) : width(_width), colour_depth(_depth), double_buff(_dbuff)
+  rowBitStruct(const size_t _width, const uint8_t _depth, const bool _dbuff, uint8_t* buffer = nullptr) : width(_width), colour_depth(_depth), double_buff(_dbuff)
   {
-
-    // #if defined(SPIRAM_FRAMEBUFFER) && defined (CONFIG_IDF_TARGET_ESP32S3)
-#if defined(SPIRAM_DMA_BUFFER)
-
-    // data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_aligned_alloc(64, size()+size()*double_buff, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    // No longer have double buffer in the same struct - have a different struct
-    data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_aligned_alloc(64, getColorDepthSize(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-#else
-    // data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_malloc( size()+size()*double_buff, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-
-    // No longer have double buffer in the same struct - have a different struct
-    data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_malloc(getColorDepthSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-
-#endif
+    if (buffer) {
+      // Use provided static buffer
+      data = (ESP32_I2S_DMA_STORAGE_TYPE*)buffer;
+    } else {
+      // Fallback to heap allocation
+      #if defined(SPIRAM_DMA_BUFFER)
+      data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_aligned_alloc(64, getColorDepthSize(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      #else
+      data = (ESP32_I2S_DMA_STORAGE_TYPE *)heap_caps_malloc(getColorDepthSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+      #endif
+    }
   }
   ~rowBitStruct() { delete data; }
 };
@@ -650,11 +647,11 @@ public:
 
     return (uint16_t *)codedBitmap;
   }
-  uint8_t *codedBitmap = (uint8_t *)calloc(MATRIX_WIDTH * MATRIX_HEIGHT * 3, sizeof(uint8_t));
+  
   
   inline uint8_t *dumpDMABuffer8()
   {
-    
+    uint8_t *codedBitmap = (uint8_t *)calloc(MATRIX_WIDTH * MATRIX_HEIGHT * 3, sizeof(uint8_t));
     if (codedBitmap == nullptr)
     {
       Serial.println("NO MEM");
