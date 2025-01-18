@@ -26,6 +26,8 @@
 
   #include "gdma_lcd_parallel16.hpp"
   #include "esp_attr.h"
+  #include "esp_check.h"
+  #include "soc/soc_caps.h"
 
 /*
   dma_descriptor_t desc;          // DMA descriptor for testing
@@ -240,44 +242,68 @@
    
     // Remaining descriptor elements are initialized before each DMA transfer.
 
-    // Allocate DMA channel and connect it to the LCD peripheral
-    static gdma_channel_alloc_config_t dma_chan_config = {
-      .sibling_chan = NULL,
-      .direction = GDMA_CHANNEL_DIRECTION_TX,
-      .flags = {
-        .reserve_sibling = 0
-      }
+    // Enhanced DMA channel configuration for ESP-IDF 5.2
+    gdma_channel_alloc_config_t dma_chan_config = {
+        .direction = GDMA_CHANNEL_DIRECTION_TX,
+        .flags = {
+            .reserve_sibling = 0,
+        },
+        #if SOC_GDMA_SUPPORT_CRC
+        .check_owner = false,
+        .intr_priority = 0,  // Added in 5.2
+        #endif
     };
-    gdma_new_channel(&dma_chan_config, &dma_chan);
-    gdma_connect(dma_chan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_LCD, 0));
-    static gdma_strategy_config_t strategy_config = {
-      .owner_check = false,
-      .auto_update_desc = false
-    };
-    gdma_apply_strategy(dma_chan, &strategy_config);
 
+    // Improved error checking
+    esp_err_t ret = gdma_new_channel(&dma_chan_config, &dma_chan);
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to allocate DMA channel");
+
+    ret = gdma_connect(dma_chan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_LCD, 0));
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to connect DMA to LCD");
+
+    // Enhanced DMA transfer ability configuration
     gdma_transfer_ability_t ability = {
         .sram_trans_align = 32,
         .psram_trans_align = 64,
+        #if SOC_GDMA_SUPPORT_EXTMEM
+        .psram_flags = GDMA_PSRAM_ACCESS_DMA,  // New in 5.2
+        #endif
     };
-    gdma_transfer_config_t gdma_config = {
-      .max_data_burst_size = 64,
-      .access_ext_mem = false
-    };
-    gdma_config_transfer(dma_chan, &gdma_config);    
-    
-    // Enable DMA transfer callback
-    static gdma_tx_event_callbacks_t tx_cbs = {
-       // .on_trans_eof is literally the only gdma tx event type available
-      .on_trans_eof = gdma_on_trans_eof_callback 
-    };
-    gdma_register_tx_event_callbacks(dma_chan, &tx_cbs, NULL);
+    ret = gdma_set_transfer_ability(dma_chan, &ability);
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to set transfer ability");
 
+    // Updated strategy configuration
+    gdma_strategy_config_t strategy_config = {
+        .owner_check = false,
+        .auto_update_desc = false,
+        #if SOC_GDMA_SUPPORT_STRATEGY
+        .use_cache = true,  // New in 5.2: Enable cache usage
+        .robust_mode = true // New in 5.2: Enable robust mode
+        #endif
+    };
+    ret = gdma_apply_strategy(dma_chan, &strategy_config);
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to apply DMA strategy");
+
+    // Configure DMA transfer with enhanced options
+    gdma_transfer_config_t gdma_config = {
+        .max_data_burst_size = 32,
+        .access_ext_mem = _cfg.psram_clk_override,
+        
+    };
+    ret = gdma_config_transfer(dma_chan, &gdma_config);
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to configure transfer");
+
+    // Enhanced callback registration with error handling
+    gdma_tx_event_callbacks_t cbs = {
+        .on_trans_eof = gdma_on_trans_eof_callback
+    };
+    ret = gdma_register_tx_event_callbacks(dma_chan, &cbs, NULL);
+    ESP_RETURN_ON_ERROR(ret, "S3", "Failed to register callbacks");
 
     // This uses a busy loop to wait for each DMA transfer to complete...
     // but the whole point of DMA is that one's code can do other work in
     // the interim. The CPU is totally free while the transfer runs!
-    while (LCD_CAM.lcd_user.lcd_start) yield(); // Wait for DMA completion callback
+    while (LCD_CAM.lcd_user.lcd_start) {yield();} // Wait for DMA completion callback
 
     // After much experimentation, each of these steps is required to get
     // a clean start on the next LCD transfer:
